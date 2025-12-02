@@ -92,14 +92,14 @@
   border-bottom-right-radius: 30px;
 }
 
-.extention-width-elem {
+.extension-width-elem {
   position: absolute;
   left: 50%;
   transform: translate(-50%, 0);
   background: lawngreen;
 }
 
-.extention-height-elem {
+.extension-height-elem {
   position: absolute;
   right: 0;
   top: 50%;

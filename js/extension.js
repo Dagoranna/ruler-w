@@ -1,12 +1,10 @@
 if (typeof EXTENSION == "undefined" || !EXTENSION) {
   var EXTENSION = {
     panelExists: false,
-    screenshot: null,
-    pageClickHandler: null,
+    selectingSquare: false,
 
-    toggleExtension: function (pageClickHandler) {
+    toggleExtension: function () {
       if (!EXTENSION.panelExists) {
-        EXTENSION.pageClickHandler = pageClickHandler;
         EXTENSION.turnExtensionOn();
       } else {
         EXTENSION.turnExtensionOff();
@@ -14,134 +12,83 @@ if (typeof EXTENSION == "undefined" || !EXTENSION) {
     },
 
     turnExtensionOn: function () {
+      console.log("turnExtensionOn");
+
       EXTENSION.panelExists = true;
       EXTENSION.UI.createScreenProtector();
-      EXTENSION.UI.createLens();
       EXTENSION.UI.createPanel();
-      document.addEventListener("click", EXTENSION.pageClickHandler);
-      document.addEventListener("mousemove", EXTENSION.UI.mouseMoveHandler);
+      EXTENSION.UI.historyCounter = 1;
 
-      EXTENSION.UI.boundZoomHandler = EXTENSION.UI.zoomHandler.bind(
+      EXTENSION.UI.boundMouseMove = EXTENSION.UI.mouseMoveHandler.bind(
         EXTENSION.UI
       );
-      document.addEventListener("wheel", EXTENSION.UI.boundZoomHandler, {
-        passive: false,
-      });
+      EXTENSION.UI.boundMouseUp = EXTENSION.UI.pageMouseUp.bind(EXTENSION.UI);
+      EXTENSION.UI.boundMouseDown = EXTENSION.UI.pageMouseDown.bind(
+        EXTENSION.UI
+      );
+
+      document.addEventListener("mousedown", EXTENSION.UI.boundMouseDown);
     },
 
     turnExtensionOff: function () {
       EXTENSION.panelExists = false;
       EXTENSION.UI?.panel?.remove();
-      EXTENSION.UI?.lens?.remove();
       EXTENSION.UI?.screenProtector?.remove();
 
-      document.removeEventListener("click", EXTENSION.pageClickHandler);
-      document.removeEventListener("mousemove", EXTENSION.UI.mouseMoveHandler);
-      document.removeEventListener("wheel", EXTENSION.UI.boundZoomHandler, {
-        passive: false,
-      });
-      delete EXTENSION.pageClickHandler;
+      document.removeEventListener("mousedown", EXTENSION.UI.boundMouseDown);
+      document.removeEventListener("mousemove", EXTENSION.UI.boundMouseMove);
+      document.removeEventListener("mouseup", EXTENSION.UI.boundMouseUp);
     },
   };
 }
-
-EXTENSION.utils = {
-  setCellsCount: function (lensAmplif) {
-    return 15 - 2 * lensAmplif;
-  },
-  setGridCellsSize: function (lensSize, cellCount) {
-    return lensSize / cellCount;
-  },
-
-  handleScreenshot: function (dataUrl, x, y) {
-    const img = new Image();
-
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0);
-      const scale = window.devicePixelRatio || 1;
-
-      const px = Number.isFinite(x) ? Math.round(x * scale) : canvas.width / 2;
-      const py = Number.isFinite(y) ? Math.round(y * scale) : canvas.height / 2;
-
-      const pixel = ctx.getImageData(px, py, 1, 1).data;
-      EXTENSION.UI.drawHistoryLine(pixel, x, y);
-      EXTENSION.screenshot = img;
-    };
-    img.src = dataUrl;
-  },
-};
 
 EXTENSION.UI = {
   screenProtector: null,
 
   panel: null,
   historyBlock: null,
+  historyCounter: 1,
 
-  lens: null,
-  lensGrid: null,
-  lensCenter: null,
-  cellCount: 13,
-  gridCellsSize: 10,
-  lensAmplif: 1,
-  lensSize: 130,
+  squareElem: null,
+  upperCornerX: 0,
+  upperCornerY: 0,
 
-  boundZoomHandler: null,
+  squareWidth: 0,
+  squareHeight: 0,
+
+  upperElem: null,
+  lowerElem: null,
+  widthElem: null,
+  heightElem: null,
+
+  boundMouseMove: null,
+  boundMouseUp: null,
+  boundMouseDown: null,
 
   createScreenProtector: function () {
     this.screenProtector = HtmlElement.create({
       type: "div",
-      id: "picker-screen-protector",
-      classes: "picker-screen-protector",
+      id: "extension-screen-protector",
+      classes: "extension-screen-protector",
     }).appendTo(document.body);
-  },
-
-  createLens: function () {
-    this.lens = HtmlElement.create({
-      type: "div",
-      id: "picker-lens",
-      classes: "picker-lens",
-    }).appendTo(this.screenProtector);
-
-    this.lensGrid = HtmlElement.create({
-      type: "div",
-      classes: "picker-lens-grid",
-      styles: {
-        "background-size": `${this.gridCellsSize}px ${this.gridCellsSize}px`,
-      },
-    }).appendTo(this.lens);
-
-    this.lensCenter = HtmlElement.create({
-      type: "div",
-      id: "picker-lens-center",
-      classes: "picker-lens-center",
-      styles: {
-        width: `${this.gridCellsSize}px`,
-        height: `${this.gridCellsSize}px`,
-      },
-    }).appendTo(this.lensGrid);
   },
 
   createPanel: function () {
     this.panel = HtmlElement.create({
       type: "div",
-      id: "picker-panel",
-      classes: "picker-panel",
+      id: "extension-panel",
+      classes: "extension-panel",
     })
       .addChild({
         type: "div",
-        id: "picker-title",
-        classes: "picker-title",
-        value: "Selected colors:",
+        id: "extension-title",
+        classes: "extension-title",
+        value: "Selected squares:",
       })
       .addChild({
         type: "button",
-        id: "picker-close",
-        classes: "picker-close",
+        id: "extension-close",
+        classes: "extension-close",
         value: "x",
         events: {
           click: () => EXTENSION.turnExtensionOff(),
@@ -151,161 +98,104 @@ EXTENSION.UI = {
 
     this.historyBlock = HtmlElement.create({
       type: "div",
-      id: "picker-history-block",
-      classes: "picker-history-block",
+      id: "extension-history-block",
+      classes: "extension-history-block",
     }).appendTo(this.panel);
+  },
 
-    this.zoomBlock = HtmlElement.create({
-      type: "input",
-      id: "picker-zoom-input",
-      classes: "picker-zoom-input",
-      value: this.lensAmplif,
-      events: {
-        input: (e) => {
-          this.lensAmplif = Number(e.target.value);
-          if (this.lensAmplif > 5) this.lensAmplif = 5;
-          if (this.lensAmplif < 1) this.lensAmplif = 1;
-          this.setLensZoom(this.lensAmplif);
+  pageMouseDown: function (e) {
+    if (!EXTENSION.panelExists) return;
+    if (this.panel && this.panel.element.contains(e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.upperCornerX = e.clientX;
+    this.upperCornerY = e.clientY;
+    this.squareWidth = 0;
+    this.squareHeight = 0;
+
+    if (!EXTENSION.selectingSquare) {
+      EXTENSION.selectingSquare = true;
+      document.querySelector(".extension-square-elem")?.remove();
+      this.squareElem = HtmlElement.create({
+        type: "div",
+        classes: "extension-square-elem",
+        styles: {
+          top: this.upperCornerY + "px",
+          left: this.upperCornerX + "px",
         },
-      },
-    }).appendTo(this.panel);
-  },
+      }).appendTo(this.screenProtector);
 
-  setLensZoom: function (newLensAmplif) {
-    this.cellCount = EXTENSION.utils.setCellsCount(newLensAmplif);
-    this.gridCellsSize = EXTENSION.utils.setGridCellsSize(
-      this.lensSize,
-      this.cellCount
-    );
+      this.upperElem = HtmlElement.create({
+        type: "div",
+        id: "extension-upper-corner",
+        classes: "extension-corner-elem extension-upper-corner",
+        value: this.upperCornerX + "px, " + this.upperCornerY + "px",
+      }).appendTo(this.squareElem);
 
-    this.lensGrid.setStyle({
-      "background-size": `${this.gridCellsSize}px ${this.gridCellsSize}px`,
-    });
+      this.lowerElem = HtmlElement.create({
+        type: "div",
+        id: "extension-lower-corner",
+        classes: "extension-corner-elem extension-lower-corner",
+      }).appendTo(this.squareElem);
 
-    this.lensCenter.setStyle({
-      width: `${this.gridCellsSize}px`,
-      height: `${this.gridCellsSize}px`,
-    });
-  },
+      this.widthElem = HtmlElement.create({
+        type: "div",
+        id: "extension-width-elem",
+        classes: "extension-width-elem",
+      }).appendTo(this.squareElem);
 
-  drawLens: function (x, y) {
-    if (!document.getElementById("picker-lens")) {
-      this.createLens();
+      this.heightElem = HtmlElement.create({
+        type: "div",
+        id: "extension-height-elem",
+        classes: "extension-height-elem",
+      }).appendTo(this.squareElem);
+
+      document.addEventListener("mousemove", this.boundMouseMove);
+      document.addEventListener("mouseup", this.boundMouseUp);
     }
-
-    let lensTop, lensLeft;
-
-    if (y > window.innerHeight / 2) {
-      lensTop = y - this.lensSize - 10;
-    } else {
-      lensTop = y + 10;
-    }
-
-    if (x + window.scrollX > window.innerWidth / 2) {
-      lensLeft = x - this.lensSize - 10;
-    } else {
-      lensLeft = x + 10;
-    }
-
-    if (this.lens?.styles?.["display"] === "none") {
-      this.lens.setStyle({ display: "block" });
-    }
-    this.lens.setStyle({ top: `${lensTop}px`, left: `${lensLeft}px` });
-
-    if (EXTENSION.screenshot) {
-      const lensCanvas = document.createElement("canvas");
-      lensCanvas.width = this.lensSize;
-      lensCanvas.height = this.lensSize;
-      const ctx = lensCanvas.getContext("2d");
-
-      const scale = window.devicePixelRatio || 1;
-      const sx = Math.round(x * scale);
-      const sy = Math.round(y * scale);
-
-      ctx.imageSmoothingEnabled = false;
-      ctx.mozImageSmoothingEnabled = false; // Firefox
-      ctx.msImageSmoothingEnabled = false; // Edge
-
-      ctx.drawImage(
-        EXTENSION.screenshot,
-        sx - Math.floor(this.cellCount / 2),
-        sy - Math.floor(this.cellCount / 2),
-        this.cellCount,
-        this.cellCount,
-        0,
-        0,
-        this.lensSize,
-        this.lensSize
-      );
-
-      const url = lensCanvas.toDataURL("image/png");
-      this.lens.setStyle({ "background-image": `url(${url})` });
-    }
-  },
-
-  hideLens: function () {
-    this.lens?.setStyle({ display: "none" });
   },
 
   mouseMoveHandler: function (e) {
     e.preventDefault();
     e.stopPropagation();
-    if (EXTENSION.UI.panel && EXTENSION.UI.panel.element.contains(e.target)) {
-      EXTENSION.UI.hideLens();
+    let mouseX = e.clientX;
+    let mouseY = e.clientY;
+    if (this.panel && this.panel.element.contains(e.target)) {
+      EXTENSION.selectingSquare = false;
+      document.querySelector(".extension-square-elem")?.remove();
+      this.squareElem = null;
     } else {
-      EXTENSION.UI.drawLens(e.clientX, e.clientY);
+      this.squareWidth = mouseX - this.upperCornerX;
+      this.squareHeight = mouseY - this.upperCornerY;
+      if (!this.squareElem) return;
+      this.squareElem.setStyle({
+        width: this.squareWidth + "px",
+        height: this.squareHeight + "px",
+      });
+
+      this.lowerElem.setValue(mouseX + "px, " + mouseY + "px");
+      this.widthElem.setValue(this.squareWidth + "px");
+      this.heightElem.setValue(this.squareHeight + "px");
     }
   },
 
-  zoomHandler: function (e) {
-    if (!EXTENSION.panelExists) return;
+  pageMouseUp: function (e) {
     e.preventDefault();
     e.stopPropagation();
 
-    if (e.deltaY < 0) {
-      this.lensAmplif =
-        this.lensAmplif === 5 ? this.lensAmplif : this.lensAmplif + 1;
-    } else {
-      this.lensAmplif =
-        this.lensAmplif === 1 ? this.lensAmplif : this.lensAmplif - 1;
-    }
+    document.removeEventListener("mousemove", this.boundMouseMove);
+    document.removeEventListener("mouseup", this.boundMouseUp);
+    EXTENSION.selectingSquare = false;
+    console.log("write to history");
 
-    this.zoomBlock.setValue(this.lensAmplif);
-
-    this.setLensZoom(this.lensAmplif);
-    this.mouseMoveHandler(e);
-  },
-
-  drawHistoryLine: function (pixel, x, y) {
-    const hex =
-      "#" +
-      [pixel[0], pixel[1], pixel[2]]
-        .map((n) => n.toString(16).padStart(2, "0"))
-        .join("");
-
-    const rgba = "rgba(" + pixel.toString(", ") + ")";
-
-    if (this.historyBlock.element && Number.isFinite(x) && Number.isFinite(y)) {
-      HtmlElement.create({
-        type: "div",
-        classes: "picker-color-line",
-      })
-        .addChild({
-          type: "div",
-          classes: "picker-color-square",
-          styles: { "background-color": hex },
-        })
-        .addChild({
-          type: "div",
-          classes: "picker-color-text",
-          value: hex,
-        })
-        .addChild({
-          type: "div",
-          classes: "picker-color-text",
-          value: rgba,
-        })
-        .prependTo(this.historyBlock);
-    }
+    HtmlElement.create({
+      type: "div",
+      value:
+        this.historyCounter++ +
+        ". w" +
+        this.squareWidth +
+        " h" +
+        this.squareHeight,
+    }).prependTo(this.historyBlock);
   },
 };

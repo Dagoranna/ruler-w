@@ -25,50 +25,5 @@ if (currentBrowser === "firefox") {
 
 function handleClick(tab) {
   console.log(tab.url);
-  api.tabs.sendMessage(tab.id, { type: "toggle-panel" });
+  api.tabs.sendMessage(tab.id, { type: "toggle-extension" });
 }
-
-/*async function capture(api, windowId) {
-  return new Promise((resolve, reject) => {
-    if (currentBrowser === "firefox") {
-      api.tabs.captureVisibleTab({ format: "png" }).then(resolve).catch(reject);
-    } else {
-      if (currentBrowser === "opera") {
-        api.tabs.captureVisibleTab(
-          windowId ?? null,
-          { format: "png" },
-          (res) => {
-            if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
-            else resolve(res);
-          }
-        );
-      } else {
-        api.tabs.captureVisibleTab(windowId, { format: "png" }, (res) => {
-          if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
-          else resolve(res);
-        });
-      }
-    }
-  });
-}*/
-
-/*api.runtime.onMessage.addListener(async (msg, sender) => {
-  if (msg.type === "pageClick") {
-    const { id: tabId, windowId } = sender.tab;
-
-    try {
-      const dataUrl = await capture(api, windowId);
-
-      api.tabs.sendMessage(tabId, {
-        type: "screenshot",
-        dataUrl,
-        x: msg?.x || null,
-        y: msg?.y || null,
-      });
-    } catch (e) {
-      console.error(e);
-    }
-  }
-});
-
-*/

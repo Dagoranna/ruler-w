@@ -37,34 +37,40 @@ function HtmlElement(elem) {
       this.bindValue = null;
   }
 
+  if (this.bindValue === "value") {
+    Object.defineProperty(this, "value", {
+      get: () => this.element.value,
+      set: (val) => {
+        this.element.value = val;
+      },
+    });
+  }
+  if (elem?.value !== undefined && this.bindValue) {
+    this.element[this.bindValue] = elem.value;
+  }
+
   if (elem?.id) {
     this.element.id = elem?.id;
   }
 
   if (elem?.classes) {
-    //классы массивом, либо строкой через запятые или пробелы
-    //default: typeof classes = string
+    //default: classes = string with spaces
+    //alternatives: string with comas, array
     this.element.className = Array.isArray(elem.classes)
       ? elem.classes.join(" ")
       : elem.classes.split(/,\s*|\s+/).join(" ");
   }
 
-  if (elem?.value !== undefined && this.bindValue) {
-    this.element[this.bindValue] = elem.value;
-    this.value = elem.value;
-  }
-
   if (elem?.events && typeof elem.events === "object") {
-    // события передаются объектом вида
-    // events: {название события: обработчик, ...}
+    // events: {event_name: callback, ...}
     this.events = {};
     for (let key in elem.events) {
       if (
         elem.events.hasOwnProperty(key) &&
         typeof elem.events[key] === "function"
       ) {
-        //названия событий могут быть click или onClick
         //default: event names are "click", "change" etc.
+        //alternatives: onClick etc.
         const eventName = key.replace(/^on/, "").toLowerCase();
         this.element.addEventListener(eventName, elem.events[key]);
         this.events[eventName] = elem.events[key];
@@ -80,25 +86,11 @@ function HtmlElement(elem) {
   }
 
   if (elem?.styles) {
-    //стили отдельно для удобства обращения к ним
     this.styles = elem.styles;
     for (let key in elem.styles) {
       this.element.style.setProperty(key, elem.styles[key]);
     }
   }
-
-  /*  if (elem.bonds) {
-    // связи передаются объектом вида
-    // bonds: {clients: [], hosts: [], syncs: []}
-    if (this.bonds?.clients) {
-      this.bonds.clients.forEach((client) => {
-        if (typeof client === 'string'){
-          //передан айди без доп.обработки
-          //HtmlElement.create(client);
-        }
-      });
-    }
-  }*/
 }
 
 HtmlElement.create = function (elem) {
@@ -133,18 +125,21 @@ HtmlElement.prototype.addClasses = function (...classNames) {
 };
 
 HtmlElement.prototype.setValue = function (val) {
-  this.element[this.bindValue] = val;
+  if (this.bindValue) {
+    this.element[this.bindValue] = val;
+  }
   return this;
 };
 
 HtmlElement.prototype.setAttr = function (attrName, attrVal) {
   this.element.setAttribute(attrName, attrVal);
+  if (!this.attrs) this.attrs = {};
+  this.attrs[attrName] = attrVal;
   return this;
 };
 
 HtmlElement.prototype.setStyle = function (styles) {
-  //стили передаются объектом вида
-  //{display: "block", ...}
+  //styles object: {display: "block", ...}
   if (!this.styles) this.styles = {};
   for (let key in styles) {
     this.element.style.setProperty(key, styles[key]);
@@ -172,6 +167,11 @@ HtmlElement.prototype.addChildren = function (children = []) {
   return this;
 };
 
+HtmlElement.prototype.removeChildren = function () {
+  this.element.replaceChildren();
+  return this;
+};
+
 HtmlElement.prototype.getChild = function (selector) {
   const el = this.element.querySelector(selector);
   return el ? new HtmlElement(el) : null;
@@ -182,11 +182,6 @@ HtmlElement.prototype.append = function (htmlElement) {
   return this;
 };
 
-/*
-HtmlElement.prototype.appendTo = function (domElement) {
-  domElement.appendChild(this.element);
-  return this;
-};*/
 HtmlElement.prototype.appendTo = function (domElement) {
   const target =
     domElement instanceof HtmlElement ? domElement.element : domElement;
@@ -210,9 +205,8 @@ HtmlElement.prototype.clone = function () {
   const clonedDom = this.element.cloneNode(true);
   const clone = new HtmlElement(clonedDom);
 
-  if (this.value !== undefined && this.bindValue) {
+  if (this.bindValue === "value") {
     clone.value = this.value;
-    clone.element[this.bindValue] = this.value;
   }
 
   if (this.attrs) {
